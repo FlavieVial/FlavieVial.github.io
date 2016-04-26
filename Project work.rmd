@@ -9,6 +9,12 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
+```{r load libraries}
+library(caret)
+```
+
+All "#DIV/0" are replaced by NAs.
+
 ```{r downloading data}
 download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
 download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv")
@@ -17,10 +23,27 @@ pmltrain <- read.csv("pml-training.csv",na.strings=c("#DIV/0!"), row.names = 1)
 pmltest <- read.csv("pml-testing.csv",na.strings=c("#DIV/0!"), row.names = 1)
 ```
 
-You can also embed plots, for example:
+First we clean up remove columns with >50% of missing values and # Some variables are irrelevant to our current project: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). We can delete these variables.
 
-```{r, echo=FALSE}
-plot(cars)
+```{r pre-process}
+pmltrain$classe = factor(pmltrain$classe)
+
+training<-pmltrain[, -c(1:7)
+                   ]
+treshold <- dim(training)[1] * 0.50
+keep_col <- !apply(training, 2, function(x) sum(is.na(x)) > treshold  || sum(x=="") > treshold)
+training <- training[, keep_col]
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+Cross-validation will be performed by subsampling our training data set randomly without replacement into 2 subsamples: subTraining data (60% of the original Training data set) and subTesting data (40%). Our models will be fitted on the subTraining data set, and tested on the subTesting data. Once the most accurate model is choosen, it will be tested on the original Testing data set.
+
+We further partition the training data into a training set and a validation set so that we can later validate the model.
+
+
+```{r, partition}
+set.seed(123)
+trainset <- createDataPartition(training$classe, p = 0.6, list = FALSE)
+Training <- pmltrain[trainset, ]
+Validation <- pmltrain[-trainset, ]
+```
