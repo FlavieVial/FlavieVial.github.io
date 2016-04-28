@@ -5,15 +5,14 @@ date: "April 26, 2016"
 output: html_document
 ---
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
+The following packages are needed to perform the analyses & write report
 ```{r load libraries}
 library(caret)
+library(randomForest)
 ```
 
-All "#DIV/0" are replaced by NAs.
+1. Tidy data
+First, we download the data and read them into R while specifying that all instances of "#DIV/0" should be considered NAs.
 
 ```{r downloading data}
 download.file(url = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
@@ -23,27 +22,45 @@ pmltrain <- read.csv("pml-training.csv",na.strings=c("#DIV/0!"), row.names = 1)
 pmltest <- read.csv("pml-testing.csv",na.strings=c("#DIV/0!"), row.names = 1)
 ```
 
-First we clean up remove columns with >50% of missing values and # Some variables are irrelevant to our current project: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). We can delete these variables.
+We remove columns with >50% of missing values (such variables will liekyl make poor predictors) and the first 7 columns which contain variables irrelevant to our project. We also plot the distribution of our outcome variable, classe, a factor variable with 5 levels. Class A corresponds to the correct execution of an exercise, while the other 4 classes correspond to common mistakes.
 
 ```{r pre-process}
-pmltrain$classe = factor(pmltrain$classe)
+training<-pmltrain[, -c(1:7)]
 
-training<-pmltrain[, -c(1:7)
-                   ]
-treshold <- dim(training)[1] * 0.50
+treshold <- dim(training)[1] * 0.20
 keep_col <- !apply(training, 2, function(x) sum(is.na(x)) > treshold  || sum(x=="") > treshold)
 training <- training[, keep_col]
+
+# exclude near zero variance features
+nzv_col <- nearZeroVar(training)
+training <- training[, -nzv_col]
+
+
+plot(training$classe, col="grey", main="Frequency of occurence of different levels of outcome variable", xlab="classe levels", ylab="Frequency")
 ```
 
+2. Create dataset for cross validation
 
-Cross-validation will be performed by subsampling our training data set randomly without replacement into 2 subsamples: subTraining data (60% of the original Training data set) and subTesting data (40%). Our models will be fitted on the subTraining data set, and tested on the subTesting data. Once the most accurate model is choosen, it will be tested on the original Testing data set.
-
-We further partition the training data into a training set and a validation set so that we can later validate the model.
-
+Cross-validation will be performed by subsampling our training data set randomly without replacement into 2 subsamples: subTraining data (60% of the original Training data set) and Validation data (40%). 
 
 ```{r, partition}
 set.seed(123)
 trainset <- createDataPartition(training$classe, p = 0.6, list = FALSE)
-Training <- pmltrain[trainset, ]
-Validation <- pmltrain[-trainset, ]
+subTraining <- training[trainset, ]
+Validation <- training[-trainset, ]
 ```
+
+Our models will be fitted on the subTraining data set, and tested on the Validation data. Once the most accurate model is choosen, it will be tested on the original Testing data set.
+
+3. Apply random forest model
+We will apply a random forest model on the subTraining data set and make predictions on Validation data set. 
+
+```{r random forest}
+my_model<- randomForest(classe ~. , data=subTraining,na.action=na.omit)
+my_predict <- predict(my_model, Validation) 
+
+confusionMatrix(my_predict, Validation$classe)
+````
+
+The cross validation accuracy is 99.43% and the out-of-sample error is therefore 0.57% (1-accuracy).
+
